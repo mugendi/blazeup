@@ -1,11 +1,11 @@
 // Copyright 2021 Anthony Mugendi
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,7 +28,9 @@
 
 use kv;
 
+use serde::*;
 use sled::IVec;
+use wildmatch::WildMatch;
 
 use std::{
     collections::HashMap,
@@ -47,10 +49,8 @@ static KV_PATH: Lazy<Mutex<HashMap<&str, PathBuf>>> = Lazy::new(|| {
     Mutex::new(m)
 });
 
-
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Types {
-
     String(String),
 
     // bool
@@ -65,26 +65,30 @@ pub enum Types {
     U64(u64),
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Record {
     pub name: String,
     pub values: Vec<Types>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct KVRecord  {
-    key : String,
-    record : Record
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct KVRecord {
+    key: String,
+    record: Record,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 enum KVMethods<'a> {
     Get(&'a str),
     Remove(&'a str),
     Set(&'a str, Record),
 }
 
-
+#[derive(Debug)]
+pub struct Filter <'f> {
+    pub key: Option<&'f str>,
+    pub name: Option<&'f str>,
+}
 
 pub fn init(path_opt: Option<&Path>) -> Result<(), Box<dyn Error>> {
     // get mutex value
@@ -146,10 +150,7 @@ fn exec(_bucket: &str, method: KVMethods) -> Result<Option<KVRecord>, Box<dyn Er
 
     match method {
         KVMethods::Set(key, val) => {
-            bucket.set(
-                key.as_bytes(),
-                kv::Bincode(val),
-            )?;
+            bucket.set(key.as_bytes(), kv::Bincode(val))?;
             Ok(None)
         }
         KVMethods::Get(key) => {
@@ -158,9 +159,9 @@ fn exec(_bucket: &str, method: KVMethods) -> Result<Option<KVRecord>, Box<dyn Er
 
             if value.is_some() {
                 let bincode = value.unwrap();
-                let result = KVRecord{
-                    key:key.into(),
-                    record: bincode.0
+                let result = KVRecord {
+                    key: key.into(),
+                    record: bincode.0,
                 };
                 Ok(Some(result))
             } else {
@@ -184,45 +185,60 @@ pub fn remove(bucket: &str, key: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn set(bucket: &str, key: &str, val: Record) -> Result<(), Box<dyn Error>>  {
+pub fn set(bucket: &str, key: &str, val: Record) -> Result<(), Box<dyn Error>> {
     // https://docs.rs/kv/0.22.0/kv/
     exec(bucket, KVMethods::Set(key, val))?;
 
     Ok(())
 }
 
-
-pub fn iter(bucket: &str) -> kv::Iter<kv::Raw, kv::Bincode<Record>>  {
-    
+pub fn iter(bucket: &str) -> kv::Iter<kv::Raw, kv::Bincode<Record>> {
     let store = get_store().expect("Could not get store");
-    let bucket = store.bucket::<kv::Raw, kv::Bincode<Record>>(Some(bucket)).expect("Could not get bucket");
+    let bucket = store
+        .bucket::<kv::Raw, kv::Bincode<Record>>(Some(bucket))
+        .expect("Could not get bucket");
 
     bucket.iter()
-
 }
 
-
-pub fn get_all(bucket: &str) -> Vec<KVRecord>  {
-
+pub fn get_all(bucket: &str, filter: Option<Filter>) -> Vec<KVRecord> {
     let iter = iter(bucket);
 
-    let mut iter_resp : Vec<KVRecord> = Vec::new();
+    let mut iter_resp: Vec<KVRecord> = Vec::new();
 
     iter.enumerate().for_each(|(_, item)| {
         let item = item.unwrap();
 
         let bincode = item.value::<kv::Bincode<Record>>().unwrap();
-        let record : Record = bincode.0;
+        let record: Record = bincode.0;
         let key_ivec: IVec = item.key::<IVec>().unwrap();
-        
         let key = str::from_utf8(&key_ivec).expect("Could not convert ivec to string");
 
-        iter_resp.push(KVRecord{
-            key:key.into(),
-            record
-        });
+        let mut filtered_ok: bool = true;
 
+        match &filter {
+            Some(f) => {
+                // filter by key first
+                if f.key.is_some() {
+                    let _key = f.key.as_ref().unwrap();
+                    filtered_ok = WildMatch::new(_key).matches(key);
+                }
 
+                //  filter by name if filtered_ok is still ok
+                if f.name.is_some() && filtered_ok {
+                    let _name = f.name.as_ref().unwrap();
+                    filtered_ok = WildMatch::new(_name).matches(&record.name);
+                }
+            }
+            None => {}
+        }
+
+        if filtered_ok {
+            iter_resp.push(KVRecord {
+                key: key.into(),
+                record,
+            });
+        }
     });
 
     iter_resp
