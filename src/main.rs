@@ -19,6 +19,9 @@ use crate::db::kv;
 use std::{error::Error, path::Path, result::Result  };
 // use kv::*;
 
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new("D:\\projects\\RUST\\blazeup\\db");
@@ -46,7 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     
     // set value by passing key & value
-    kv::set(&bucket, "vehicles", vehicles)?;
+    // kv::set(&bucket, "vehicles", vehicles)?;
+
 
 
     let tvs = kv::Record{
@@ -58,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
 
-    kv::set(&bucket, "electronics-tvs", tvs)?;
+    kv::set(&bucket, "electronics-tvs", tvs.clone())?;
 
     let radios = kv::Record{
         name:"old-models".into(), //should be a string
@@ -69,7 +73,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
 
-    kv::set(&bucket, "electronics-radios", radios)?;
+    kv::set(&bucket, "electronics-radios", radios.clone())?;
+
+    
+    //Use Transaction to set multiple values
+    // We use the convenient kv::tx! macro
+    // all values are entered as key => Record
+    let ts: HashMap<_, _> = kv::tx! { 
+        "tx-vehicles" => vehicles ,
+        "tx-radios" => radios ,
+        "tx-tvs" => tvs 
+    };
+
+    //commit transaction
+    kv::transaction(bucket, ts)?;
 
     // get single value
     let value = kv::get(&bucket, "electronics-radios");

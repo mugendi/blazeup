@@ -25,7 +25,7 @@ The following example attempts to organize **Japanese Machines** into a dataset 
 ```rust
 pub mod db;
 
-use crate::db::kv;
+use blazeup::kv;
 
 use std::{error::Error, path::Path, result::Result  };
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Note the folder is created if missing
     let path = Path::new("./db");
 
-     // reset
+    // reset
     // Note reset deletes the entire KV directory
     kv::reset(Some(&path))?;
 
@@ -58,8 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     
     // set value by passing key & value
-    kv::set(&bucket, "vehicles", vehicles)?;
-
+    kv::set(&bucket, "vehicles", vehicles.clone())?;
 
     let tvs = kv::Record{
         name:"models".into(), //should be a string
@@ -70,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
 
-    kv::set(&bucket, "electronics-tvs", tvs)?;
+    kv::set(&bucket, "electronics-tvs", tvs.clone())?;
 
     let radios = kv::Record{
         name:"old-models".into(), //should be a string
@@ -81,7 +80,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
 
-    kv::set(&bucket, "electronics-radios", radios)?;
+    kv::set(&bucket, "electronics-radios", radios.clone())?;
+
+    
+    //Use Transaction to set multiple values
+    // We use the convenient kv::tx! macro
+    // all values are entered as key => Record
+    let ts: HashMap<_, _> = kv::tx! { 
+        "tx-vehicles" => vehicles ,
+        "tx-radios" => radios ,
+        "tx-tvs" => tvs 
+    };
+
+    //commit transaction
+    kv::transaction(bucket, ts)?;
 
     // get single value
     let value = kv::get(&bucket, "electronics-radios");
@@ -101,8 +113,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let all = kv::get_all(&bucket, Some(filter));
 
     println!("{:#?}", all);
-
-    Ok(())
 
 }
 

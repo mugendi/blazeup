@@ -49,7 +49,7 @@ static KV_PATH: Lazy<Mutex<HashMap<&str, PathBuf>>> = Lazy::new(|| {
     Mutex::new(m)
 });
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub enum Types {
     String(String),
 
@@ -65,7 +65,7 @@ pub enum Types {
     U64(u64),
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Record {
     pub name: String,
     pub values: Vec<Types>,
@@ -82,13 +82,29 @@ enum KVMethods<'a> {
     Get(&'a str),
     Remove(&'a str),
     Set(&'a str, Record),
+    Transaction(HashMap<&'a str, Record>),
 }
 
 #[derive(Debug)]
-pub struct Filter <'f> {
+pub struct Filter<'f> {
     pub key: Option<&'f str>,
     pub name: Option<&'f str>,
 }
+
+// transaction macro rules
+// Borrowed from..
+#[macro_export]
+macro_rules! tx {
+    // map-like
+    ($($k:expr => $v:expr),* $(,)?) => {
+        std::iter::Iterator::collect(std::array::IntoIter::new([$(($k, $v),)*]))
+    };
+    // set-like
+    // ($($v:expr),* $(,)?) => {
+    //     std::iter::Iterator::collect(std::array::IntoIter::new([$($v,)*]))
+    // };
+}
+pub(crate) use tx;
 
 pub fn init(path_opt: Option<&Path>) -> Result<(), Box<dyn Error>> {
     // get mutex value
@@ -153,6 +169,20 @@ fn exec(_bucket: &str, method: KVMethods) -> Result<Option<KVRecord>, Box<dyn Er
             bucket.set(key.as_bytes(), kv::Bincode(val))?;
             Ok(None)
         }
+        KVMethods::Transaction(ts) => {
+            // start transaction
+            bucket.transaction(|txn| {
+                // add all values
+                for (key, val) in &ts {
+                    txn.set(key.as_bytes(), kv::Bincode(val.clone()))?;
+                }
+                // finish up
+                Ok(())
+            })?;
+
+            // bucket.set(key.as_bytes(), kv::Bincode(val))?;
+            Ok(None)
+        }
         KVMethods::Get(key) => {
             //  get value
             let value = bucket.get(key.as_bytes()).unwrap();
@@ -188,6 +218,12 @@ pub fn remove(bucket: &str, key: &str) -> Result<(), Box<dyn Error>> {
 pub fn set(bucket: &str, key: &str, val: Record) -> Result<(), Box<dyn Error>> {
     // https://docs.rs/kv/0.22.0/kv/
     exec(bucket, KVMethods::Set(key, val))?;
+
+    Ok(())
+}
+
+pub fn transaction(bucket: &str, ts: HashMap<&str, Record>) -> Result<(), Box<dyn Error>> {
+    exec(bucket, KVMethods::Transaction(ts))?;
 
     Ok(())
 }
