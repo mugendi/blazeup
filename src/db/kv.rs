@@ -73,8 +73,8 @@ pub struct Record {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct KVRecord {
-    key: String,
-    record: Record,
+    pub key: String,
+    pub record: Record,
 }
 
 #[derive(Debug, Deserialize)]
