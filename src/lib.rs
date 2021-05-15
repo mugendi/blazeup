@@ -13,4 +13,4 @@
 // limitations under the License.
 
 pub mod db;
-use crate::db::kv;
+pub use crate::db::kv;
