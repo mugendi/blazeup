@@ -2,7 +2,8 @@
 name = "blazeup"
 version = "0.1.0"
 authors = ["Anthony Mugendi <ngurumugz@gmail.com>"]
-edition = "2021"
+edition = "2018"
+license = "MIT"
 repository = "https://github.com/mugendi/blazeup"
 documentation = "https://docs.rs/blazeup"
 description = "Key value database that seeks to add more features to the basic get/set/remove methods"
