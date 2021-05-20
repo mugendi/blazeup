@@ -82,7 +82,7 @@ enum KVMethods<'a> {
     Get(&'a str),
     Remove(&'a str),
     Set(&'a str, Record),
-    Transaction(HashMap<&'a str, Record>),
+    Transaction(HashMap<String, Record>),
 }
 
 #[derive(Debug)]
@@ -91,20 +91,6 @@ pub struct Filter<'f> {
     pub name: Option<&'f str>,
 }
 
-// transaction macro rules
-// Borrowed from..
-#[macro_export]
-macro_rules! tx {
-    // map-like
-    ($($k:expr => $v:expr),* $(,)?) => {
-        std::iter::Iterator::collect(std::array::IntoIter::new([$(($k, $v),)*]))
-    };
-    // set-like
-    // ($($v:expr),* $(,)?) => {
-    //     std::iter::Iterator::collect(std::array::IntoIter::new([$($v,)*]))
-    // };
-}
-pub(crate) use tx;
 
 pub fn init(path_opt: Option<&Path>) -> Result<(), Box<dyn Error>> {
     // get mutex value
@@ -222,7 +208,7 @@ pub fn set(bucket: &str, key: &str, val: Record) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn transaction(bucket: &str, ts: HashMap<&str, Record>) -> Result<(), Box<dyn Error>> {
+pub fn transaction(bucket: &str, ts: HashMap<String, Record>) -> Result<(), Box<dyn Error>> {
     exec(bucket, KVMethods::Transaction(ts))?;
 
     Ok(())
